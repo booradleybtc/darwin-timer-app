@@ -66,8 +66,10 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
       setLastTrade(state.lastTrade)
     }
     
-    // Calculate time left based on server time
-    const elapsed = state.serverTime - state.startTime
+    // Calculate time left based on current time vs start time
+    // The server already calculated this correctly, but we need to account for client-server time difference
+    const now = Date.now()
+    const elapsed = now - state.startTime
     const remaining = Math.max(0, state.duration - elapsed)
     setTimeLeft(remaining)
   }, [])
