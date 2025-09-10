@@ -9,6 +9,13 @@ export interface GlobalTimerState {
   duration: number
   isActive: boolean
   lastSwapTime: number | null
+  lastTrade: {
+    type: 'buy' | 'sell'
+    amount: number
+    dex: string
+    signature: string
+    timestamp: number
+  } | null
   serverTime: number
   instanceId: string
 }
@@ -110,7 +117,7 @@ export class ProductionGlobalTimerService {
       // Set the callback for when trades are detected
       this.solanaMonitor.setSwapCallback((tradeInfo: any) => {
         console.log(`[${this.getInstanceId()}] Trade detected:`, tradeInfo)
-        this.resetTimer()
+        this.resetTimer(tradeInfo)
       })
       
       // Start monitoring
@@ -170,6 +177,7 @@ export class ProductionGlobalTimerService {
         duration: parseInt(process.env.TIMER_DEFAULT_DURATION || '600000'), // 10 minutes
         isActive: true,
         lastSwapTime: null,
+        lastTrade: null,
         serverTime: Date.now(),
         instanceId: this.getInstanceId()
       }
@@ -190,15 +198,25 @@ export class ProductionGlobalTimerService {
     }
   }
 
-  async resetTimer() {
+  async resetTimer(tradeInfo?: any) {
     console.log(`[${this.getInstanceId()}] Resetting global timer`)
     console.log(`[${this.getInstanceId()}] Redis available: ${this.isRedisAvailable}`)
     
+    // Get current state to preserve lastTrade if no new trade info provided
+    const currentState = await this.getCurrentState()
+    
     const resetState: GlobalTimerState = {
-      startTime: Date.now(),
+      startTime: tradeInfo ? Date.now() : currentState.startTime, // Only reset startTime for new trades
       duration: parseInt(process.env.TIMER_DEFAULT_DURATION || '600000'),
       isActive: true,
-      lastSwapTime: Date.now(),
+      lastSwapTime: tradeInfo ? Date.now() : currentState.lastSwapTime, // Only update lastSwapTime for new trades
+      lastTrade: tradeInfo ? {
+        type: tradeInfo.type,
+        amount: tradeInfo.amount,
+        dex: tradeInfo.dex,
+        signature: tradeInfo.signature,
+        timestamp: tradeInfo.timestamp
+      } : currentState.lastTrade, // Preserve existing trade info if no new trade
       serverTime: Date.now(),
       instanceId: this.getInstanceId()
     }

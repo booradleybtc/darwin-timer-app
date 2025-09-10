@@ -9,7 +9,7 @@ import { getTimeSynchronizer } from '@/lib/time-sync'
 import { SolanaTokenSwapMonitor } from '@/lib/solana-monitor'
 
 export function VaultTimer() {
-  const { timeLeft, isActive, lastTrade, resetTimer } = useTimer()
+  const { timeLeft, isActive, lastTrade, resetTimer, isInitialized } = useTimer()
   const [isSynced, setIsSynced] = useState(false)
   const [syncStatus, setSyncStatus] = useState<'syncing' | 'synced' | 'error'>('syncing')
 
@@ -81,9 +81,15 @@ export function VaultTimer() {
         )}
       </div>
       <div className="text-center">
-        <div className={`text-4xl font-bold mb-1 ${isActive ? 'text-white' : 'text-red-400'}`}>
-          {hours} : {minutes} : {seconds}
-        </div>
+        {!isInitialized ? (
+          <div className="text-4xl font-bold mb-1 text-gray-400">
+            Loading...
+          </div>
+        ) : (
+          <div className={`text-4xl font-bold mb-1 ${isActive ? 'text-white' : 'text-red-400'}`}>
+            {hours} : {minutes} : {seconds}
+          </div>
+        )}
         <div className="flex justify-center gap-8 text-xs text-gray-400 font-semibold">
           <span>Hour</span>
           <span>Minutes</span>
@@ -114,7 +120,8 @@ export function VaultTimer() {
             onClick={resetTimer}
             size="sm"
             variant="outline"
-            className="text-xs border-yellow-400/50 text-yellow-400 hover:bg-yellow-400/10 hover:border-yellow-400"
+            disabled={!isInitialized}
+            className="text-xs border-yellow-400/50 text-yellow-400 hover:bg-yellow-400/10 hover:border-yellow-400 disabled:opacity-50"
           >
             <RotateCcw className="w-3 h-3 mr-1" />
             Manual Reset

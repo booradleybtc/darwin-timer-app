@@ -11,6 +11,7 @@ interface TimerContextType {
   resetTimer: () => void
   lastSwapTime: number | null
   lastTrade: TradeInfo | null
+  isInitialized: boolean
 }
 
 const TimerContext = createContext<TimerContextType | undefined>(undefined)
@@ -23,6 +24,7 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
   const [lastSwapTime, setLastSwapTime] = useState<number | null>(null)
   const [lastTrade, setLastTrade] = useState<TradeInfo | null>(null)
   const [serverTime, setServerTime] = useState<number>(Date.now())
+  const [isInitialized, setIsInitialized] = useState(false)
   const monitorRef = useRef<SolanaTokenSwapMonitor | null>(null)
   const wsServiceRef = useRef<ReturnType<typeof getWebSocketService> | null>(null)
 
@@ -35,11 +37,34 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
     wsService.sendTimerReset()
   }, [])
 
+  // Function to fetch initial state from server
+  const fetchInitialState = useCallback(async () => {
+    try {
+      const response = await fetch('/api/timer')
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success && data.data) {
+          console.log('Fetched initial timer state from server:', data.data)
+          updateFromServerState(data.data)
+          setIsInitialized(true)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch initial timer state:', error)
+      setIsInitialized(true) // Still initialize to prevent blocking
+    }
+  }, [])
+
   // Function to update local state from server state
   const updateFromServerState = useCallback((state: GlobalTimerState) => {
     setServerTime(state.serverTime)
     setLastSwapTime(state.lastSwapTime)
     setIsActive(state.isActive)
+    
+    // Update last trade information if available
+    if (state.lastTrade) {
+      setLastTrade(state.lastTrade)
+    }
     
     // Calculate time left based on server time
     const elapsed = state.serverTime - state.startTime
@@ -49,6 +74,9 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
 
   // Initialize global timer synchronization
   useEffect(() => {
+    // First, fetch the initial state from the server
+    fetchInitialState()
+
     // Initialize WebSocket service for global sync
     const wsService = getWebSocketService()
     wsServiceRef.current = wsService
@@ -82,11 +110,11 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
         monitorRef.current.stopMonitoring()
       }
     }
-  }, [resetTimer, updateFromServerState])
+  }, [resetTimer, updateFromServerState, fetchInitialState])
 
   // Local countdown effect (for smooth UI updates)
   useEffect(() => {
-    if (!isActive || timeLeft <= 0) return
+    if (!isInitialized || !isActive || timeLeft <= 0) return
 
     const timer = setInterval(() => {
       setTimeLeft(prev => {
@@ -99,14 +127,15 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
     }, 1000)
 
     return () => clearInterval(timer)
-  }, [isActive, timeLeft])
+  }, [isInitialized, isActive, timeLeft])
 
   const value: TimerContextType = {
     timeLeft,
     isActive,
     resetTimer,
     lastSwapTime,
-    lastTrade
+    lastTrade,
+    isInitialized
   }
 
   return (
