@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: darwin-timer-backend
+    env: node
+    plan: free
+    buildCommand: cd backend && npm install
+    startCommand: cd backend && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: REDIS_URL
+        fromDatabase:
+          name: redis
+          property: connectionString
+      - key: TOKEN_ADDRESS
+        value: 9VxExA1iRPbuLLdSJ2rB3nyBxsyLReT4aqzZBMaBaY1p
+      - key: HELIUS_API_KEY
+        value: 466f06cf-0f8e-4f05-9c46-a95cb4a83f67
+
+databases:
+  - name: redis
+    plan: free
+    type: redis
