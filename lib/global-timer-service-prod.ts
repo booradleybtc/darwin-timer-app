@@ -515,7 +515,9 @@ export class ProductionGlobalTimerService {
   }
 
   private getInstanceId(): string {
-    return process.env.INSTANCE_ID || `instance-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    // Use a consistent instance ID for production to prevent timer resets
+    // In Vercel, we want all instances to share the same timer state
+    return process.env.INSTANCE_ID || 'vercel-production'
   }
 
   private getKeyPrefix(): string {
