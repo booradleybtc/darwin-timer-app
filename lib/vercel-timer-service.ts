@@ -1,4 +1,4 @@
-import { Redis } from '@upstash/redis'
+import { createClient } from 'redis'
 
 export interface GlobalTimerState {
   startTime: number
@@ -18,7 +18,7 @@ export interface GlobalTimerState {
 
 export class VercelTimerService {
   private static instance: VercelTimerService
-  private redis: Redis | null = null
+  private redis: ReturnType<typeof createClient> | null = null
   private isRedisAvailable = false
 
   private constructor() {
@@ -35,12 +35,16 @@ export class VercelTimerService {
   private async initializeRedis() {
     try {
       if (process.env.REDIS_URL) {
-        this.redis = new Redis({
-          url: process.env.REDIS_URL,
-          token: process.env.REDIS_TOKEN
+        this.redis = createClient({
+          url: process.env.REDIS_URL
         })
         
-        // Test connection
+        this.redis.on('error', (err) => {
+          console.error('Redis Client Error:', err)
+          this.isRedisAvailable = false
+        })
+        
+        await this.redis.connect()
         await this.redis.ping()
         this.isRedisAvailable = true
         console.log('Redis connected successfully for Vercel timer service')
