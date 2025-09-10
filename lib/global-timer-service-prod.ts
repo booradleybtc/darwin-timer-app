@@ -168,10 +168,12 @@ export class ProductionGlobalTimerService {
   }
 
   async getCurrentState(): Promise<GlobalTimerState> {
+    console.log(`[${this.getInstanceId()}] Getting current state, Redis available: ${this.isRedisAvailable}`)
     const state = await this.getStoredTimerState()
     
     if (!state) {
       // Initialize a new timer state if none exists
+      console.log(`[${this.getInstanceId()}] No existing state found, creating new timer state`)
       const initialState: GlobalTimerState = {
         startTime: Date.now(),
         duration: parseInt(process.env.TIMER_DEFAULT_DURATION || '600000'), // 10 minutes
@@ -190,6 +192,13 @@ export class ProductionGlobalTimerService {
     const now = Date.now()
     const elapsed = now - state.startTime
     const remaining = Math.max(0, state.duration - elapsed)
+
+    console.log(`[${this.getInstanceId()}] Returning existing state:`, {
+      startTime: state.startTime,
+      elapsed: elapsed,
+      remaining: remaining,
+      isActive: remaining > 0
+    })
 
     return {
       ...state,
@@ -338,10 +347,19 @@ export class ProductionGlobalTimerService {
       }
       
       const stateJson = await this.redis.get(`${this.getKeyPrefix()}:timer:state`)
-      return stateJson ? JSON.parse(stateJson) : null
+      if (stateJson) {
+        const state = JSON.parse(stateJson)
+        console.log(`[${this.getInstanceId()}] Retrieved timer state from Redis:`, {
+          startTime: state.startTime,
+          isActive: state.isActive,
+          lastTrade: state.lastTrade ? 'exists' : 'null'
+        })
+        return state
+      }
+      return null
     } catch (error) {
       console.error('Error getting timer state from Redis:', error)
-      throw error
+      return null // Return null instead of throwing to prevent crashes
     }
   }
 
