@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { ProductionGlobalTimerService } from '@/lib/global-timer-service-prod'
+import { VercelTimerService } from '@/lib/vercel-timer-service'
 
-const globalTimer = ProductionGlobalTimerService.getInstance()
+const globalTimer = VercelTimerService.getInstance()
 
 export async function GET() {
   try {
