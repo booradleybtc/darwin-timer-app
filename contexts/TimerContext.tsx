@@ -1,8 +1,6 @@
 'use client'
 
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
-import { SolanaTokenSwapMonitor, TradeInfo } from '@/lib/solana-monitor'
-import { getWebSocketService, TimerSyncMessage } from '@/lib/websocket-service'
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { GlobalTimerState } from '@/lib/global-timer-service-prod'
 
 interface TimerContextType {
@@ -10,7 +8,7 @@ interface TimerContextType {
   isActive: boolean
   resetTimer: () => void
   lastSwapTime: number | null
-  lastTrade: TradeInfo | null
+  lastTrade: any | null
   isInitialized: boolean
 }
 
@@ -22,20 +20,34 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
   const [timeLeft, setTimeLeft] = useState(TIMER_DURATION)
   const [isActive, setIsActive] = useState(true)
   const [lastSwapTime, setLastSwapTime] = useState<number | null>(null)
-  const [lastTrade, setLastTrade] = useState<TradeInfo | null>(null)
+  const [lastTrade, setLastTrade] = useState<any | null>(null)
   const [serverTime, setServerTime] = useState<number>(Date.now())
   const [isInitialized, setIsInitialized] = useState(false)
-  const monitorRef = useRef<SolanaTokenSwapMonitor | null>(null)
-  const wsServiceRef = useRef<ReturnType<typeof getWebSocketService> | null>(null)
 
   // Function to reset timer
-  const resetTimer = useCallback(() => {
-    console.log('Timer reset triggered by token swap!')
+  const resetTimer = useCallback(async () => {
+    console.log('Timer reset triggered!')
     
-    // Send reset to server - this will sync across all users
-    const wsService = getWebSocketService()
-    wsService.sendTimerReset()
-  }, [])
+    try {
+      // Send reset to backend server
+      const response = await fetch('/api/timer', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action: 'reset' }),
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success && data.data) {
+          updateFromServerState(data.data)
+        }
+      }
+    } catch (error) {
+      console.error('Error resetting timer:', error)
+    }
+  }, [updateFromServerState])
 
   // Function to fetch initial state from server
   const fetchInitialState = useCallback(async () => {
@@ -74,45 +86,30 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
     setTimeLeft(remaining)
   }, [])
 
-  // Initialize global timer synchronization
+  // Initialize timer synchronization with simple polling
   useEffect(() => {
     // First, fetch the initial state from the server
     fetchInitialState()
 
-    // Initialize WebSocket service for global sync
-    const wsService = getWebSocketService()
-    wsServiceRef.current = wsService
-    
-    wsService.setMessageHandler((message: TimerSyncMessage) => {
-      if (message.type === 'initial' && message.data) {
-        console.log('Received initial timer state from server')
-        updateFromServerState(message.data)
-      } else if (message.type === 'update' && message.data) {
-        console.log('Received timer update from server')
-        updateFromServerState(message.data)
-      } else if (message.type === 'ping') {
-        // Keep connection alive
-        console.log('Received ping from server')
+    // Set up polling to get timer updates every 5 seconds
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetch('/api/timer')
+        if (response.ok) {
+          const data = await response.json()
+          if (data.success && data.data) {
+            updateFromServerState(data.data)
+          }
+        }
+      } catch (error) {
+        console.error('Error polling timer state:', error)
       }
-    })
-
-    // Initialize Solana monitoring
-    const monitor = new SolanaTokenSwapMonitor()
-    monitor.setSwapCallback((tradeInfo: TradeInfo) => {
-      console.log('Trade detected:', tradeInfo)
-      setLastTrade(tradeInfo)
-      resetTimer()
-    })
-    monitor.startMonitoring()
-    monitorRef.current = monitor
+    }, 5000)
 
     return () => {
-      wsService.disconnect()
-      if (monitorRef.current) {
-        monitorRef.current.stopMonitoring()
-      }
+      clearInterval(pollInterval)
     }
-  }, [resetTimer, updateFromServerState, fetchInitialState])
+  }, [updateFromServerState, fetchInitialState])
 
   // Local countdown effect (for smooth UI updates)
   useEffect(() => {
