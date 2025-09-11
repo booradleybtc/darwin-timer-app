@@ -86,7 +86,7 @@ class SimpleTimerService {
   async checkForSwaps() {
     try {
       const response = await fetch(
-        `https://api.helius.xyz/v0/addresses/${process.env.TOKEN_ADDRESS}/transactions?api-key=${process.env.HELIUS_API_KEY}&limit=5`
+        `https://api.helius.xyz/v0/addresses/${process.env.TOKEN_ADDRESS}/transactions?api-key=${process.env.HELIUS_API_KEY}&limit=10`
       );
 
       if (!response.ok) {
@@ -97,17 +97,28 @@ class SimpleTimerService {
       
       if (data && data.length > 0) {
         const latestTx = data[0];
+        const latestTxTime = latestTx.timestamp * 1000;
         
         // Check if this is a new transaction since last reset
-        if (timerState.lastSwapTime && latestTx.timestamp * 1000 > timerState.lastSwapTime) {
+        if (!timerState.lastSwapTime || latestTxTime > timerState.lastSwapTime) {
           // New transaction detected - reset timer
-          const tradeInfo = {
-            type: 'buy', // Simplified - assume all are buys
-            amount: Math.random() * 1000, // Placeholder amount
+          console.log('🔄 New transaction detected:', latestTx.signature);
+          
+          // Try to extract trade info from the transaction
+          let tradeInfo = {
+            type: 'buy',
+            amount: 0,
             dex: 'Unknown',
             signature: latestTx.signature,
-            timestamp: latestTx.timestamp * 1000
+            timestamp: latestTxTime
           };
+          
+          // Look for token transfers in the transaction
+          if (latestTx.tokenTransfers && latestTx.tokenTransfers.length > 0) {
+            const transfer = latestTx.tokenTransfers[0];
+            tradeInfo.amount = transfer.tokenAmount || 0;
+            tradeInfo.type = transfer.fromUserAccount === process.env.TOKEN_ADDRESS ? 'sell' : 'buy';
+          }
           
           this.resetTimer(tradeInfo);
         }
@@ -139,13 +150,32 @@ app.get('/api/timer', (req, res) => {
 
 app.post('/api/timer', (req, res) => {
   try {
-    const state = timerService.resetTimer();
+    const body = req.body;
+    const state = timerService.resetTimer(body.tradeInfo);
     res.json({
       success: true,
       data: state
     });
   } catch (error) {
     console.error('Error in POST /api/timer:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to reset timer'
+    });
+  }
+});
+
+// Manual reset endpoint for testing
+app.post('/api/timer/reset', (req, res) => {
+  try {
+    const state = timerService.resetTimer();
+    res.json({
+      success: true,
+      message: 'Timer reset manually',
+      data: state
+    });
+  } catch (error) {
+    console.error('Error in manual reset:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to reset timer'
